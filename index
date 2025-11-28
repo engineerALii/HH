@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تحويل النصوص إلى PDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&family=Cairo:wght@300;400;700;900&family=Changa:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;700&family=Lalezar&family=Reem+Kufi:wght@400;700&family=Scheherazade+New:wght@400;700&family=Tajawal:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        .font-amiri { font-family: 'Amiri', serif; }
+        .font-cairo { font-family: 'Cairo', sans-serif; }
+        .font-tajawal { font-family: 'Tajawal', sans-serif; }
+        .font-almarai { font-family: 'Almarai', sans-serif; }
+        .font-scheherazade { font-family: 'Scheherazade New', serif; }
+        .font-reem { font-family: 'Reem Kufi', sans-serif; }
+        .font-ibm { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+        .font-changa { font-family: 'Changa', sans-serif; }
+        .font-lalezar { font-family: 'Lalezar', cursive; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .page-wrapper {
+            position: relative;
+            margin-bottom: 2rem;
+            transition: all 0.3s;
+        }
+        
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 2.5cm;
+            background-color: white;
+            color: black;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            outline: none;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            position: relative;
+            transition: background-color 0.3s;
+        }
+
+        .delete-page-btn {
+            position: absolute;
+            top: 0;
+            left: -40px;
+            background-color: #ef4444;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+        .page-wrapper:hover .delete-page-btn {
+            opacity: 1;
+        }
+
+        .a4-page img {
+            max-width: 100%;
+            height: auto;
+            margin: 5px;
+            display: inline-block;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+            cursor: move;
+        }
+        .a4-page img.img-selected {
+            border-color: #3b82f6;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        [contenteditable]:empty:before {
+            content: attr(placeholder);
+            color: #9ca3af;
+            cursor: text;
+            display: block;
+        }
+
+        .toolbar-btn {
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            color: #e2e8f0;
+            transition: all 0.2s;
+        }
+        .toolbar-btn:hover {
+            background-color: #334155;
+            color: white;
+        }
+        .toolbar-btn.active {
+            background-color: #475569;
+            color: #38bdf8;
+        }
+        
+        .img-control-btn { color: #93c5fd; }
+        .img-control-btn:hover { background-color: #1e3a8a; color: white; }
+
+        .loading-spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* تنسيق النافذة المنبثقة (Modal) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 90%;
+            max-width: 400px;
+            transform: scale(0.95);
+            transition: transform 0.3s;
+            color: #1f2937;
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 h-screen flex flex-col overflow-hidden font-cairo">
+
+    <!-- الرأس وشريط الأدوات -->
+    <header class="bg-slate-800 border-b border-slate-700 shadow-lg z-10 flex-shrink-0">
+        <div class="px-6 py-3 border-b border-slate-700 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                تحويل النصوص إلى PDF
+            </h1>
+            
+            <div class="flex gap-3">
+                <button onclick="addNewPage()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition border border-slate-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    <span>إضافة صفحة</span>
+                </button>
+
+                <button onclick="generatePDF()" id="download-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    <span>تصدير PDF</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="px-4 py-2 flex flex-wrap gap-2 items-center justify-center bg-slate-800 text-sm" onmousedown="event.preventDefault()">
+            
+            <!-- الخطوط -->
+            <div class="flex items-center gap-2 bg-slate-700 p-1 rounded-lg">
+                <select id="fontFamily" onchange="formatDoc('fontName', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-40">
+                    <option value="Cairo">القاهرة (Cairo)</option>
+                    <option value="Amiri">أميري (Amiri)</option>
+                    <option value="Tajawal">تجول (Tajawal)</option>
+                    <option value="Almarai">المراعي (Almarai)</option>
+                    <option value="Scheherazade New">شهرزاد (Scheherazade)</option>
+                    <option value="IBM Plex Sans Arabic">IBM Plex</option>
+                    <option value="Reem Kufi">ريم كوفي (Kufi)</option>
+                    <option value="Changa">تشانقا (Changa)</option>
+                    <option value="Lalezar">لاليزار (Lalezar)</option>
+                </select>
+                
+                <select onchange="formatDoc('fontSize', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-16">
+                    <option value="1">10px</option>
+                    <option value="2">13px</option>
+                    <option value="3" selected>16px</option>
+                    <option value="4">18px</option>
+                    <option value="5">24px</option>
+                    <option value="6">32px</option>
+                    <option value="7">48px</option>
+                </select>
+            </div>
+
+            <div class="w-px h-8 bg-slate-600 mx-1"></div>
+
+            <div class="flex gap-1 bg-slate-700 p-1 rounded-lg">
+                <button class="toolbar-btn font-bold" onclick="formatDoc('bold')" title="غامق">B</button>
+                <button class="toolbar-btn italic" onclick="formatDoc('italic')" title="مائل">I</button>
+                <button class="toolbar-btn underline" onclick="formatDoc('underline')" title="تسطير">U</button>
+            </div>
+
+            <div class="w-px h-8 bg-slate-600 mx-1"></div>
+
+            <div class="flex gap-1 bg-slate-700 p-1 rounded-lg">
+                <button class="toolbar-btn" onclick="formatDoc('justifyRight')" title="يمين">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyCenter')" title="وسط">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M4 18h16"></path></svg>
+                </button>
+                <button class="toolbar-btn" onclick="formatDoc('justifyLeft')" title="يسار">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h7"></path></svg>
+                </button>
+            </div>
+
+            <div class="w-px h-8 bg-slate-600 mx-1"></div>
+
+            <div class="flex gap-1 bg-slate-700 p-1 rounded-lg border border-blue-500/30">
+                 <button class="toolbar-btn img-control-btn" onclick="setImageFloat('right')" title="صورة يمين">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 6h11M9 12h11M9 18h11M3 6v6h4V6H3z"></path></svg>
+                </button>
+                <button class="toolbar-btn img-control-btn" onclick="setImageFloat('center')" title="صورة وسط">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 18h16M8 11h8v2H8z"></path></svg>
+                </button>
+                <button class="toolbar-btn img-control-btn" onclick="setImageFloat('left')" title="صورة يسار">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h11M4 12h11M4 18h11M17 6v6h4V6h-4z"></path></svg>
+                </button>
+                <button class="toolbar-btn img-control-btn" onclick="setImageFloat('none')" title="ضمن السطر">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="w-px h-8 bg-slate-600 mx-1"></div>
+
+            <div class="flex gap-1 bg-slate-700 p-1 rounded-lg">
+                <button class="toolbar-btn" onclick="formatDoc('insertUnorderedList')" title="قائمة نقطية">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16M8 6h.01M8 12h.01M8 18h.01"></path></svg>
+                </button>
+                
+                <button class="toolbar-btn text-yellow-400 hover:text-yellow-300" onclick="triggerImageUpload()" title="إدراج صورة">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </button>
+                <input type="file" id="imageUploadInput" accept="image/*" class="hidden" onchange="insertImage(this)">
+                
+                <div class="relative flex items-center mr-2">
+                    <label for="colorPicker" class="cursor-pointer flex items-center gap-1 hover:text-white" title="لون النص">
+                        <span class="w-4 h-4 rounded-full bg-gradient-to-tr from-red-500 to-blue-500 border border-white"></span>
+                        <span class="text-xs text-gray-300">نص</span>
+                    </label>
+                    <input type="color" id="colorPicker" onchange="formatDoc('foreColor', this.value)" class="absolute opacity-0 w-6 h-6 cursor-pointer left-0">
+                </div>
+
+                <div class="relative flex items-center mr-2 border-r border-slate-500 pr-2">
+                    <label for="bgColorPicker" class="cursor-pointer flex items-center gap-1 hover:text-white" title="لون الصفحة">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-pink-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-xs text-gray-300">صفحة</span>
+                    </label>
+                    <input type="color" id="bgColorPicker" value="#ffffff" onchange="setPageColor(this.value)" class="absolute opacity-0 w-6 h-6 cursor-pointer left-0">
+                </div>
+            </div>
+
+            <!-- زر مسح المحتوى المرتبط بالنافذة المنبثقة -->
+            <button class="toolbar-btn text-red-400 hover:text-red-300 mr-2" onclick="showClearModal()" title="مسح المحتوى">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- منطقة العمل -->
+    <main class="flex-grow overflow-auto bg-slate-900 p-8 flex justify-center relative" id="main-scroll-area">
+        <div id="pages-container" class="flex flex-col gap-8 w-full items-center">
+            
+            <div class="page-wrapper">
+                <div id="page-1" 
+                     contenteditable="true" 
+                     class="a4-page font-cairo text-base shadow-2xl transition-all"
+                     spellcheck="false"
+                     placeholder="الصفحة 1: ابدأ الكتابة هنا...">
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- نافذة تأكيد المسح (Modal) -->
+    <div id="clearConfirmModal" class="modal-overlay">
+        <div class="modal-content text-center">
+            <div class="mb-4 text-red-500 flex justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">تأكيد الحذف</h3>
+            <p class="text-gray-600 mb-6">سيتم حذف جميع الصفحات والمحتوى والبدء بمستند فارغ.<br>هل أنت متأكد من رغبتك في المتابعة؟</p>
+            <div class="flex justify-center gap-4">
+                <button onclick="closeClearModal()" class="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition focus:outline-none">
+                    إلغاء
+                </button>
+                <button onclick="confirmClearContent()" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition focus:outline-none shadow-lg">
+                    نعم، مسح الكل
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-slate-800 text-slate-500 text-center py-2 text-xs border-t border-slate-700 z-10">
+        تم التطوير باستخدام تقنيات الويب الحديثة | Multi-Page Editor
+    </footer>
+
+    <script>
+        let selectedImage = null;
+        let lastFocusedPage = document.getElementById('page-1');
+        let currentPageColor = '#ffffff';
+
+        function setPageColor(color) {
+            currentPageColor = color;
+            const pages = document.querySelectorAll('.a4-page');
+            pages.forEach(page => {
+                page.style.backgroundColor = color;
+            });
+        }
+
+        document.getElementById('pages-container').addEventListener('click', function(e) {
+            const clickedPage = e.target.closest('.a4-page');
+            if (clickedPage) {
+                lastFocusedPage = clickedPage;
+            }
+
+            if (selectedImage) {
+                selectedImage.classList.remove('img-selected');
+                selectedImage = null;
+            }
+            if (e.target.tagName === 'IMG') {
+                selectedImage = e.target;
+                selectedImage.classList.add('img-selected');
+                lastFocusedPage = e.target.closest('.a4-page');
+            }
+        });
+
+        document.getElementById('pages-container').addEventListener('focus', function(e) {
+            if (e.target.classList.contains('a4-page')) {
+                lastFocusedPage = e.target;
+            }
+        }, true);
+
+        function addNewPage() {
+            const container = document.getElementById('pages-container');
+            const pageCount = container.querySelectorAll('.a4-page').length + 1;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'page-wrapper';
+            
+            const newPage = document.createElement('div');
+            newPage.className = 'a4-page font-cairo text-base shadow-2xl transition-all';
+            newPage.style.backgroundColor = currentPageColor; 
+            newPage.contentEditable = true;
+            newPage.spellcheck = false;
+            newPage.setAttribute('placeholder', `الصفحة ${pageCount}: ابدأ الكتابة هنا...`);
+            newPage.id = 'page-' + pageCount;
+            
+            const firstPage = container.querySelector('.a4-page');
+            if(firstPage) {
+               newPage.className = firstPage.className;
+            }
+
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-page-btn';
+            deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+            deleteBtn.title = 'حذف هذه الصفحة';
+            deleteBtn.onclick = function() {
+                // استخدام Modal مخصص للحذف الفردي أيضاً سيكون أفضل، لكن للسرعة سنكتفي بالرئيسي
+                // يمكن تطوير هذا الجزء أيضاً.
+                if(window.confirm && confirm('هل تريد حذف هذه الصفحة؟')) {
+                   wrapper.remove();
+                } else {
+                   // Fallback إذا تم حظر confirm
+                   wrapper.remove(); 
+                }
+            };
+
+            wrapper.appendChild(deleteBtn);
+            wrapper.appendChild(newPage);
+            container.appendChild(wrapper);
+
+            newPage.focus();
+            newPage.scrollIntoView({ behavior: 'smooth' });
+            lastFocusedPage = newPage;
+        }
+
+        function formatDoc(cmd, value = null) {
+            if (value) {
+                document.execCommand(cmd, false, value);
+            } else {
+                document.execCommand(cmd);
+            }
+            if (lastFocusedPage) lastFocusedPage.focus();
+        }
+
+        // --- دوال النافذة المنبثقة (Modal) ---
+        function showClearModal() {
+            document.getElementById('clearConfirmModal').classList.add('active');
+        }
+
+        function closeClearModal() {
+            document.getElementById('clearConfirmModal').classList.remove('active');
+        }
+
+        function confirmClearContent() {
+            const container = document.getElementById('pages-container');
+            container.innerHTML = '';
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'page-wrapper';
+            
+            const page1 = document.createElement('div');
+            page1.id = 'page-1';
+            page1.className = 'a4-page font-cairo text-base shadow-2xl transition-all';
+            page1.style.backgroundColor = currentPageColor; 
+            page1.contentEditable = true;
+            page1.spellcheck = false;
+            page1.setAttribute('placeholder', 'الصفحة 1: ابدأ الكتابة هنا...');
+            
+            wrapper.appendChild(page1);
+            container.appendChild(wrapper);
+            
+            lastFocusedPage = page1;
+            page1.focus();
+            
+            closeClearModal(); // إغلاق النافذة
+        }
+        // -------------------------------------
+
+        function triggerImageUpload() {
+            document.getElementById('imageUploadInput').click();
+        }
+
+        function insertImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    if (lastFocusedPage) {
+                        lastFocusedPage.focus();
+                        document.execCommand('insertImage', false, e.target.result);
+                    } else {
+                        alert('الرجاء الضغط داخل الصفحة التي تريد إضافة الصورة إليها.');
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+            input.value = '';
+        }
+
+        function setImageFloat(direction) {
+            if (!selectedImage) {
+                alert('الرجاء الضغط على الصورة لتحديدها أولاً.');
+                return;
+            }
+            selectedImage.style.float = 'none';
+            selectedImage.style.display = 'inline-block';
+            selectedImage.style.margin = '5px';
+            selectedImage.style.textAlign = ''; 
+            
+            if (direction === 'left') {
+                selectedImage.style.float = 'left';
+                selectedImage.style.margin = '0 10px 10px 0';
+            } else if (direction === 'right') {
+                selectedImage.style.float = 'right';
+                selectedImage.style.margin = '0 0 10px 10px';
+            } else if (direction === 'center') {
+                selectedImage.style.display = 'block';
+                selectedImage.style.marginLeft = 'auto';
+                selectedImage.style.marginRight = 'auto';
+            } else {
+                selectedImage.style.float = 'none';
+                selectedImage.style.display = 'inline-block';
+            }
+            
+            setTimeout(() => {
+                selectedImage.classList.remove('img-selected');
+                selectedImage = null;
+            }, 500);
+        }
+
+        async function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const pages = document.querySelectorAll('.a4-page');
+            const btn = document.getElementById('download-btn');
+            const originalBtnContent = btn.innerHTML;
+
+            if (selectedImage) selectedImage.classList.remove('img-selected');
+
+            btn.disabled = true;
+            btn.innerHTML = `<div class="loading-spinner"></div> <span class="mr-2">جاري المعالجة...</span>`;
+
+            try {
+                await document.fonts.ready;
+                
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgWidth = 210;
+                const pageHeight = 297;
+
+                for (let i = 0; i < pages.length; i++) {
+                    const page = pages[i];
+                    
+                    const canvas = await html2canvas(page, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: currentPageColor || '#ffffff', 
+                        windowWidth: page.scrollWidth,
+                        windowHeight: page.scrollHeight
+                    });
+
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                    const imgHeight = canvas.height * imgWidth / canvas.width;
+
+                    if (i > 0) {
+                        pdf.addPage();
+                    }
+                    
+                    pdf.setFillColor(currentPageColor || '#ffffff');
+                    pdf.rect(0, 0, imgWidth, pageHeight, 'F');
+
+                    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, Math.min(imgHeight, pageHeight)); 
+                }
+
+                pdf.save('المستند_متعدد_الصفحات.pdf');
+
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                // استخدام Modal للخطأ أيضاً أفضل، لكن alert هنا قد تعمل في بعض البيئات
+                // لتجنب المشاكل، سنطبع في الكونسول فقط إذا فشل الـ alert
+                try { alert('حدث خطأ أثناء إنشاء ملف PDF'); } catch(e) {}
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnContent;
+                if (selectedImage) selectedImage.classList.add('img-selected');
+            }
+        }
+    </script>
+</body>
+</html>
