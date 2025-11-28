@@ -174,11 +174,12 @@
             </div>
         </div>
 
-        <div class="px-4 py-2 flex flex-wrap gap-2 items-center justify-center bg-slate-800 text-sm" onmousedown="event.preventDefault()">
+        <!-- تم تحديث هذا السطر للسماح بالنقر على القوائم المنسدلة (SELECT) وحقول الإدخال (INPUT) -->
+        <div class="px-4 py-2 flex flex-wrap gap-2 items-center justify-center bg-slate-800 text-sm" onmousedown="if(event.target.tagName !== 'SELECT' && event.target.tagName !== 'INPUT') event.preventDefault()">
             
             <!-- الخطوط -->
             <div class="flex items-center gap-2 bg-slate-700 p-1 rounded-lg">
-                <select id="fontFamily" onchange="formatDoc('fontName', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-40">
+                <select id="fontFamily" onchange="formatDoc('fontName', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-40 cursor-pointer">
                     <option value="Cairo">القاهرة (Cairo)</option>
                     <option value="Amiri">أميري (Amiri)</option>
                     <option value="Tajawal">تجول (Tajawal)</option>
@@ -190,7 +191,7 @@
                     <option value="Lalezar">لاليزار (Lalezar)</option>
                 </select>
                 
-                <select onchange="formatDoc('fontSize', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-16">
+                <select onchange="formatDoc('fontSize', this.value)" class="bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 outline-none focus:border-blue-500 w-16 cursor-pointer">
                     <option value="1">10px</option>
                     <option value="2">13px</option>
                     <option value="3" selected>16px</option>
@@ -380,12 +381,9 @@
             deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
             deleteBtn.title = 'حذف هذه الصفحة';
             deleteBtn.onclick = function() {
-                // استخدام Modal مخصص للحذف الفردي أيضاً سيكون أفضل، لكن للسرعة سنكتفي بالرئيسي
-                // يمكن تطوير هذا الجزء أيضاً.
                 if(window.confirm && confirm('هل تريد حذف هذه الصفحة؟')) {
                    wrapper.remove();
                 } else {
-                   // Fallback إذا تم حظر confirm
                    wrapper.remove(); 
                 }
             };
@@ -539,8 +537,6 @@
 
             } catch (error) {
                 console.error('Error generating PDF:', error);
-                // استخدام Modal للخطأ أيضاً أفضل، لكن alert هنا قد تعمل في بعض البيئات
-                // لتجنب المشاكل، سنطبع في الكونسول فقط إذا فشل الـ alert
                 try { alert('حدث خطأ أثناء إنشاء ملف PDF'); } catch(e) {}
             } finally {
                 btn.disabled = false;
